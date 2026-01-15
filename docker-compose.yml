@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  chatengine:
+    build: .
+    container_name: chatengine
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
+      CHATENGINE_JWT_SECRET: ${CHATENGINE_JWT_SECRET}
+      OUTBOX_WORKER_TOKEN: ${OUTBOX_WORKER_TOKEN}
+      SUPABASE_MEDIA_BUCKET: ${SUPABASE_MEDIA_BUCKET}
+      SUPABASE_MEDIA_URL_EXPIRES_IN: ${SUPABASE_MEDIA_URL_EXPIRES_IN}
+    networks:
+      - shared
+
+  chatengine-worker:
+    image: chatengine
+    container_name: chatengine-worker
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          wget --quiet --method=POST \
+            --header="Authorization: Bearer $$OUTBOX_WORKER_TOKEN" \
+            --output-document=- \
+            http://chatengine:3000/api/internal/outbox/process >/dev/null 2>&1 || true
+          sleep 5
+        done
+    environment:
+      OUTBOX_WORKER_TOKEN: ${OUTBOX_WORKER_TOKEN}
+    depends_on:
+      - chatengine
+    networks:
+      - shared
+
+networks:
+  shared:
+    external: true
