@@ -13,6 +13,13 @@ import { processEvolutionWebhookEvent } from '../application/use-cases/processEv
 import { processOutboxBatch } from '../application/use-cases/processOutbox'
 import { fetchMessageContext } from '../application/use-cases/fetchMessageContext'
 import { SupabaseMediaStorage } from '../infrastructure/media/SupabaseMediaStorage'
+import { initStorage } from '../infrastructure/api/storage'
+
+let storageInitialized = false
+if (!storageInitialized) {
+  initStorage()
+  storageInitialized = true
+}
 
 const repositories = {
   conversationRepository: new SupabaseConversationRepository(),

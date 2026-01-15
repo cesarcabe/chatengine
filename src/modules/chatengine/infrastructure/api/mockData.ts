@@ -1,8 +1,8 @@
 import { Conversation } from '../../domain/Conversation'
 import { Message } from '../../domain/Message'
-import { storage } from './storage'
+import type { InMemoryStorage } from './storage'
 
-export function initializeMockData() {
+export function initializeMockData(storage: InMemoryStorage) {
   const mockWorkspaceId = 'dev-workspace'
   const workspaceConversations = storage.getWorkspaceConversations(mockWorkspaceId)
   const workspaceMessages = storage.getWorkspaceMessages(mockWorkspaceId)
