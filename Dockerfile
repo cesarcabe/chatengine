@@ -1,22 +1,18 @@
-FROM node:lts-alpine AS deps
+FROM node:20-alpine
+
 WORKDIR /app
+
+# Copia dependências
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --omit=dev
 
-FROM node:lts-alpine AS builder
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+# Copia código
 COPY . .
-RUN npm run build
 
-FROM node:lts-alpine AS runner
-WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/package.json /app/package-lock.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/next.config.js ./next.config.js
+ENV PORT=3000
+
 EXPOSE 3000
+
+# Roda o servidor (Next API routes funcionam)
 CMD ["npm", "run", "start"]
