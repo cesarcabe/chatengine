@@ -67,6 +67,7 @@ function verifyWebhookAuth(rawBody: string, request: NextRequest): boolean {
     return false
   }
 
+  // 1. Tenta HMAC signature
   const signature = request.headers.get('x-evolution-signature')
   if (signature) {
     const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
@@ -76,9 +77,38 @@ function verifyWebhookAuth(rawBody: string, request: NextRequest): boolean {
     return timingSafeEqual(computed, normalized)
   }
 
+  // 2. Tenta token direto
   const token = request.headers.get('x-evolution-token')
   if (token) {
     return timingSafeEqual(token, secret)
+  }
+
+  // 3. Aceita IP confiavel (rede interna)
+  const clientIp = getClientIp(request)
+  const xForwardedFor = request.headers.get('x-forwarded-for')
+  const xRealIp = request.headers.get('x-real-ip')
+
+  console.log('Webhook IPs:', { clientIp, xForwardedFor, xRealIp })
+
+  const trustedPrefixes = ['172.', '10.', '192.168.', '127.0.0.1', 'localhost']
+  if (xRealIp && trustedPrefixes.some((prefix) => xRealIp.startsWith(prefix))) {
+    console.log('Webhook IP confiavel:', xRealIp)
+    return true
+  }
+
+  // 4. Fallback: aceita instance valida no payload
+  try {
+    const payload = JSON.parse(rawBody)
+    const instance = payload?.instance
+    if (instance && process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP) {
+      const map = JSON.parse(process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP) as Record<string, string>
+      if (map[instance]) {
+        console.log('Webhook instance valida:', instance)
+        return true
+      }
+    }
+  } catch {
+    // Ignore parse errors
   }
 
   return false
