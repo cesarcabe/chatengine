@@ -1,8 +1,6 @@
-version: "3.9"
-
 services:
   chatengine:
-    image: ghcr.io/cesarcabe/chatengine:latest
+    build: .
     container_name: chatengine
     restart: unless-stopped
     expose:
@@ -31,7 +29,7 @@ services:
       - nginx-proxy-manager_default
 
   chatengine-worker:
-    image: ghcr.io/cesarcabe/chatengine:latest
+    build: .
     container_name: chatengine-worker
     restart: unless-stopped
     command:
