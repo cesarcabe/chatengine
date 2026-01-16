@@ -23,6 +23,7 @@ services:
       NODE_ENV: production
     networks:
       - evolution_default
+      - nginx-proxy-manager_default
 
   chatengine-worker:
     build: .
@@ -45,7 +46,11 @@ services:
       - chatengine
     networks:
       - evolution_default
+      - nginx-proxy-manager_default
 
 networks:
   evolution_default:
+    external: true
+
+  nginx-proxy-manager_default:
     external: true
