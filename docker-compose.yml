@@ -1,6 +1,8 @@
+version: "3.9"
+
 services:
   chatengine:
-    build: .
+    image: ghcr.io/cesarcabe/chatengine:latest
     container_name: chatengine
     restart: unless-stopped
     expose:
@@ -29,7 +31,7 @@ services:
       - nginx-proxy-manager_default
 
   chatengine-worker:
-    build: .
+    image: ghcr.io/cesarcabe/chatengine:latest
     container_name: chatengine-worker
     restart: unless-stopped
     command:
@@ -39,7 +41,6 @@ services:
         while true; do
           wget --quiet --method=POST \
             --header="Authorization: Bearer $$OUTBOX_WORKER_TOKEN" \
-            --output-document=- \
             http://chatengine:3000/api/internal/outbox/process >/dev/null 2>&1 || true
           sleep 5
         done
