@@ -155,12 +155,28 @@ export async function OPTIONS(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (isRateLimited(request)) {
-      return NextResponse.json({ error: 'Rate limit excedido' }, { status: 429 })
-    }
+    // if (isRateLimited(request)) {
+    //   return NextResponse.json({ error: 'Rate limit excedido' }, { status: 429 })
+    // }
 
     const rawBody = await request.text()
-    if (!verifyWebhookAuth(rawBody, request)) {
+    
+    // 🔍 DEBUG: Ver o que está chegando
+    console.log('=== DEBUG WEBHOOK ===')
+    console.log('Headers:', {
+      'x-evolution-token': request.headers.get('x-evolution-token'),
+      'x-evolution-signature': request.headers.get('x-evolution-signature'),
+      apikey: request.headers.get('apikey'),
+    })
+    console.log('EVOLUTION_WEBHOOK_SECRET:', process.env.EVOLUTION_WEBHOOK_SECRET)
+    console.log('EVOLUTION_WEBHOOK_TOKENS:', process.env.EVOLUTION_WEBHOOK_TOKENS)
+    console.log('EVOLUTION_INSTANCE_WORKSPACE_MAP:', process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP)
+    
+    const authResult = verifyWebhookAuth(rawBody, request)
+    console.log('Auth passou?', authResult)
+    console.log('=====================')
+    
+    if (!authResult) {
       return NextResponse.json({ error: 'Webhook não autorizado' }, { status: 401 })
     }
 
