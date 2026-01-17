@@ -1,7 +1,9 @@
 import { OutboxRepository } from '../ports/OutboxRepository'
 import { MessageRepository } from '../ports/MessageRepository'
+import { ConversationRepository } from '../ports/ConversationRepository'
 import { WhatsAppProvider } from '../ports/whatsappProvider'
 import { MediaStorage } from '../ports/MediaStorage'
+import { findEvolutionInstanceByWhatsappNumberId } from '../../infrastructure/repositories/whatsappNumbersRepository'
 
 const MAX_ATTEMPTS = Number(process.env.OUTBOX_MAX_ATTEMPTS || '5')
 
@@ -15,6 +17,7 @@ function computeBackoff(attempt: number): number {
 export type ProcessOutboxDeps = {
   outboxRepository: OutboxRepository
   messageRepository: MessageRepository
+  conversationRepository: ConversationRepository
   whatsAppProvider: WhatsAppProvider
   mediaStorage: MediaStorage
 }
@@ -37,13 +40,46 @@ export async function processOutboxBatch(deps: ProcessOutboxDeps, limit = 10) {
         throw new Error('payload_invalido')
       }
 
+      // Busca a mensagem para obter conversationId
+      const message = await deps.messageRepository.findById(item.workspaceId, item.messageId)
+      if (!message) {
+        throw new Error('mensagem_nao_encontrada')
+      }
+
+      // Busca a conversa para obter whatsappNumberId
+      const conversation = await deps.conversationRepository.findById(
+        item.workspaceId,
+        message.conversationId
+      )
+      
+      let instanceName: string | undefined
+      let apiKey: string | undefined
+
+      // Se houver whatsappNumberId, busca instance_name e api_key do Supabase
+      if (conversation?.whatsappNumberId) {
+        const instanceData = await findEvolutionInstanceByWhatsappNumberId(conversation.whatsappNumberId)
+        if (instanceData) {
+          instanceName = instanceData.instanceName
+          apiKey = instanceData.apiKey || undefined
+        }
+      }
+
       let providerMessageId: string | undefined
       const replyMessageId = payload.replyMessageId as string | undefined
 
+      // Prepara opções com instance e apiKey dinâmicas (se encontradas)
+      const providerOptions: { replyMessageId?: string; instance?: string; apiKey?: string } = {
+        replyMessageId,
+      }
+      if (instanceName) {
+        providerOptions.instance = instanceName
+      }
+      if (apiKey) {
+        providerOptions.apiKey = apiKey
+      }
+
       if (type === 'text') {
-        const result = await deps.whatsAppProvider.sendText(to, payload.text || '', {
-          replyMessageId,
-        })
+        const result = await deps.whatsAppProvider.sendText(to, payload.text || '', providerOptions)
         providerMessageId = result.providerMessageId
       } else {
         const mediaUrl = payload.mediaPath
@@ -55,9 +91,7 @@ export async function processOutboxBatch(deps: ProcessOutboxDeps, limit = 10) {
           mediaUrl,
           type,
           payload.caption || undefined,
-          {
-            replyMessageId,
-          }
+          providerOptions
         )
         providerMessageId = result.providerMessageId
       }

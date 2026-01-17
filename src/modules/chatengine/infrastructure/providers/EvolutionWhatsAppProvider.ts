@@ -35,15 +35,20 @@ export class EvolutionWhatsAppProvider implements WhatsAppProvider {
 
   /**
    * Envia mensagem de texto via Evolution API
+   * 
+   * @param options.instance - Sobrescreve a instância padrão se fornecido
+   * @param options.apiKey - Sobrescreve a API key padrão se fornecido
    */
   async sendText(
     to: string,
     text: string,
-    options?: { replyMessageId?: string }
+    options?: { replyMessageId?: string; instance?: string; apiKey?: string }
   ): Promise<SendTextResult> {
     try {
       const normalizedJid = normalizeJid(to)
-      const url = `${this.baseUrl}/message/sendText/${encodeURIComponent(this.instance)}`
+      const instance = options?.instance || this.instance
+      const apiKey = options?.apiKey || this.apiKey
+      const url = `${this.baseUrl}/message/sendText/${encodeURIComponent(instance)}`
 
       const body: any = {
         number: normalizedJid,
@@ -57,7 +62,7 @@ export class EvolutionWhatsAppProvider implements WhatsAppProvider {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          apikey: this.apiKey,
+          apikey: apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -85,17 +90,22 @@ export class EvolutionWhatsAppProvider implements WhatsAppProvider {
   /**
    * Envia mídia via Evolution API
    * Suporta: image, video, audio, file (document)
+   * 
+   * @param options.instance - Sobrescreve a instância padrão se fornecido
+   * @param options.apiKey - Sobrescreve a API key padrão se fornecido
    */
   async sendMedia(
     to: string,
     mediaUrl: string,
     type: 'image' | 'video' | 'audio' | 'file',
     caption?: string,
-    options?: { replyMessageId?: string }
+    options?: { replyMessageId?: string; instance?: string; apiKey?: string }
   ): Promise<SendMediaResult> {
     try {
       const normalizedJid = normalizeJid(to)
-      const url = `${this.baseUrl}/message/sendMedia/${encodeURIComponent(this.instance)}`
+      const instance = options?.instance || this.instance
+      const apiKey = options?.apiKey || this.apiKey
+      const url = `${this.baseUrl}/message/sendMedia/${encodeURIComponent(instance)}`
 
       // Mapeia tipo do domínio para tipo da Evolution API
       const evolutionMediaType = type === 'file' ? 'document' : type
@@ -118,7 +128,7 @@ export class EvolutionWhatsAppProvider implements WhatsAppProvider {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          apikey: this.apiKey,
+          apikey: apiKey,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),

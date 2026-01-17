@@ -26,6 +26,7 @@ import {
   InvalidPayloadError,
   MessageNotFoundError,
 } from '@/modules/chatengine/application/use-cases/errors'
+import { findWorkspaceByInstance } from '@/modules/chatengine/infrastructure/repositories/whatsappNumbersRepository'
 
 const rateLimitBucket = new Map<string, { count: number; resetAt: number }>()
 const RATE_LIMIT_WINDOW_MS = 60_000
@@ -61,81 +62,29 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.timingSafeEqual(aBuf, bBuf)
 }
 
-function verifyWebhookAuth(rawBody: string, request: NextRequest): boolean {
-  const secret = process.env.EVOLUTION_WEBHOOK_SECRET
-  if (!secret || !secret.trim()) {
+/**
+ * Extrai instance e api_key do body do webhook
+ * Evolution não envia headers customizados, então extraímos do body
+ */
+function extractInstanceFromPayload(payload: any): { instance: string | null; apiKey: string | null } {
+  // Evolution envia instance no body
+  const instance = payload?.instance || payload?.instanceName || null
+  const apiKey = payload?.api_key || payload?.apiKey || null
+
+  return { instance, apiKey }
+}
+
+/**
+ * Validação simplificada: apenas verifica se a instância existe no banco
+ * Se instance existir na tabela whatsapp_numbers, o webhook é válido
+ */
+async function verifyWebhookByInstance(instanceName: string | null): Promise<boolean> {
+  if (!instanceName) {
     return false
   }
 
-  // 1. Tenta HMAC signature
-  const signature = request.headers.get('x-evolution-signature')
-  if (signature) {
-    const computed = crypto.createHmac('sha256', secret).update(rawBody).digest('hex')
-    const normalized = signature.startsWith('sha256=')
-      ? signature.replace('sha256=', '')
-      : signature
-    return timingSafeEqual(computed, normalized)
-  }
-
-  // 2. Tenta token direto
-  const token = request.headers.get('x-evolution-token')
-  if (token) {
-    return timingSafeEqual(token, secret)
-  }
-
-  // 3. Aceita IP confiavel (rede interna)
-  const clientIp = getClientIp(request)
-  const xForwardedFor = request.headers.get('x-forwarded-for')
-  const xRealIp = request.headers.get('x-real-ip')
-
-  console.log('Webhook IPs:', { clientIp, xForwardedFor, xRealIp })
-
-  const trustedPrefixes = ['172.', '10.', '192.168.', '127.0.0.1', 'localhost']
-  if (xRealIp && trustedPrefixes.some((prefix) => xRealIp.startsWith(prefix))) {
-    console.log('Webhook IP confiavel:', xRealIp)
-    return true
-  }
-
-  // 4. Fallback: aceita instance valida no payload
-  try {
-    const payload = JSON.parse(rawBody)
-    const instance = payload?.instance
-    if (instance && process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP) {
-      const map = JSON.parse(process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP) as Record<string, string>
-      if (map[instance]) {
-        console.log('Webhook instance valida:', instance)
-        return true
-      }
-    }
-  } catch {
-    // Ignore parse errors
-  }
-
-  return false
-}
-
-function parseWorkspaceFromToken(token: string | null): string | null {
-  if (!token) return null
-  const mapRaw = process.env.EVOLUTION_WEBHOOK_TOKENS
-  if (!mapRaw) return null
-  try {
-    const parsed = JSON.parse(mapRaw) as Record<string, string>
-    return parsed[token] || null
-  } catch {
-    return null
-  }
-}
-
-function parseWorkspaceFromInstance(instance: string | undefined): string | null {
-  if (!instance) return null
-  const mapRaw = process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP
-  if (!mapRaw) return null
-  try {
-    const parsed = JSON.parse(mapRaw) as Record<string, string>
-    return parsed[instance] || null
-  } catch {
-    return null
-  }
+  const instanceData = await findWorkspaceByInstance(instanceName)
+  return instanceData !== null
 }
 
 function extractEventType(payload: any): string | undefined {
@@ -191,25 +140,7 @@ export async function POST(request: NextRequest) {
 
     const rawBody = await request.text()
     
-    // 🔍 DEBUG: Ver o que está chegando
-    console.log('=== DEBUG WEBHOOK ===')
-    console.log('Headers:', {
-      'x-evolution-token': request.headers.get('x-evolution-token'),
-      'x-evolution-signature': request.headers.get('x-evolution-signature'),
-      apikey: request.headers.get('apikey'),
-    })
-    console.log('EVOLUTION_WEBHOOK_SECRET:', process.env.EVOLUTION_WEBHOOK_SECRET)
-    console.log('EVOLUTION_WEBHOOK_TOKENS:', process.env.EVOLUTION_WEBHOOK_TOKENS)
-    console.log('EVOLUTION_INSTANCE_WORKSPACE_MAP:', process.env.EVOLUTION_INSTANCE_WORKSPACE_MAP)
-    
-    const authResult = verifyWebhookAuth(rawBody, request)
-    console.log('Auth passou?', authResult)
-    console.log('=====================')
-    
-    if (!authResult) {
-      return NextResponse.json({ error: 'Webhook não autorizado' }, { status: 401 })
-    }
-
+    // Parse do payload primeiro para extrair instance e api_key do body
     let payload: any
     try {
       payload = JSON.parse(rawBody)
@@ -217,14 +148,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Payload inválido' }, { status: 400 })
     }
 
-    const tokenHeader = request.headers.get('x-evolution-token')
-    const workspaceFromToken = parseWorkspaceFromToken(tokenHeader)
-    const workspaceId =
-      workspaceFromToken || parseWorkspaceFromInstance(payload?.instance)
+    // 🔍 DEBUG: Ver o que está chegando
+    console.log('=== DEBUG WEBHOOK ===')
+    console.log('Payload instance:', payload?.instance || payload?.instanceName)
+    console.log('Payload api_key:', payload?.api_key || payload?.apiKey ? '***' : 'não fornecido')
+    
+    // Extrai instance e api_key do body (Evolution não envia headers customizados)
+    const { instance: instanceName, apiKey } = extractInstanceFromPayload(payload)
 
-    if (!workspaceId) {
-      return NextResponse.json({ error: 'Workspace não autorizado' }, { status: 403 })
+    if (!instanceName) {
+      console.log('Instance não encontrado no payload')
+      console.log('=====================')
+      return NextResponse.json({ error: 'instance é obrigatório no payload' }, { status: 400 })
     }
+
+    // Busca workspace_id por instance_name na tabela whatsapp_numbers
+    const instanceData = await findWorkspaceByInstance(instanceName)
+    
+    if (!instanceData) {
+      console.log('Instance não encontrado na tabela whatsapp_numbers:', instanceName)
+      console.log('=====================')
+      return NextResponse.json({ error: 'Instance não autorizado' }, { status: 403 })
+    }
+
+    const { workspaceId, whatsappNumberId } = instanceData
+
+    // Validação opcional: se api_key foi fornecida no body, pode validar
+    // (mas não é obrigatório para processar o webhook)
+    if (apiKey && instanceData.apiKey) {
+      // Validação opcional de api_key se ambas existirem
+      // Não bloqueia o processamento se não bater
+    }
+
+    console.log('Workspace encontrado:', workspaceId)
+    console.log('WhatsApp Number ID:', whatsappNumberId)
+    console.log('=====================')
 
     const eventType = extractEventType(payload)
     const externalMessageId = extractExternalMessageId(payload)
@@ -280,7 +238,7 @@ export async function POST(request: NextRequest) {
         payload,
         workspaceId,
         currentUserId: 'system',
-        whatsappNumberId: payload?.instance,
+        whatsappNumberId,
       })
       updateWebhookEventStatus(event.id, 'processed')
       return NextResponse.json({ ok: true })

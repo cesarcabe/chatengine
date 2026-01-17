@@ -71,6 +71,7 @@ const useCases = {
       {
         outboxRepository: repositories.outboxRepository,
         messageRepository: repositories.messageRepository,
+        conversationRepository: repositories.conversationRepository,
         whatsAppProvider: providers.whatsAppProvider,
         mediaStorage,
       },

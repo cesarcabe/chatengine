@@ -16,22 +16,28 @@ export interface SendMediaResult {
 export interface WhatsAppProvider {
   /**
    * Envia mensagem de texto
+   * 
+   * @param options.instance - Instância do Evolution a ser usada (sobrescreve padrão)
+   * @param options.apiKey - API key do Evolution a ser usada (sobrescreve padrão)
    */
   sendText(
     to: string,
     text: string,
-    options?: { replyMessageId?: string }
+    options?: { replyMessageId?: string; instance?: string; apiKey?: string }
   ): Promise<SendTextResult>
 
   /**
    * Envia mídia (imagem, vídeo, áudio, arquivo)
+   * 
+   * @param options.instance - Instância do Evolution a ser usada (sobrescreve padrão)
+   * @param options.apiKey - API key do Evolution a ser usada (sobrescreve padrão)
    */
   sendMedia(
     to: string,
     mediaUrl: string,
     type: 'image' | 'video' | 'audio' | 'file',
     caption?: string,
-    options?: { replyMessageId?: string }
+    options?: { replyMessageId?: string; instance?: string; apiKey?: string }
   ): Promise<SendMediaResult>
 }
 
