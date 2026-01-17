@@ -12,9 +12,10 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
 
-      EVOLUTION_API_URL: ${EVOLUTION_API_URL}
+      # URL interna do Evolution (comunicação entre containers)
+      EVOLUTION_API_URL: http://evolution_api:8080
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}}
+      EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
 
       CHATENGINE_JWT_SECRET: ${CHATENGINE_JWT_SECRET}
       OUTBOX_WORKER_TOKEN: ${OUTBOX_WORKER_TOKEN}
@@ -24,9 +25,8 @@ services:
 
       NODE_ENV: production
     networks:
-      - evolution_default
-      - nginx-proxy-manager_default
-      - crmnet
+      - app_network  # Rede compartilhada com Evolution
+      - nginx-proxy-manager_default  # Apenas para proxy reverso
 
   chatengine-worker:
     image: ghcr.io/cesarcabe/chatengine:latest
@@ -47,16 +47,16 @@ services:
     depends_on:
       - chatengine
     networks:
-      - evolution_default
-      - nginx-proxy-manager_default
+      - app_network
 
 networks:
-  evolution_default:
-    external: true
+  # Rede principal - EXTERNA (com internet)
+  # ChatEngine e Evolution precisam de internet
+  app_network:
+    name: app_network
+    driver: bridge
+    external: false  # Não é interna!
 
+  # Proxy reverso (já existe)
   nginx-proxy-manager_default:
     external: true
-
-  crmnet:
-    name: crmnet
-    driver: bridge
