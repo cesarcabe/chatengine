@@ -18,7 +18,11 @@ function parseAllowedOrigins(): string[] {
 }
 
 function isLovableOrigin(hostname: string): boolean {
-  return hostname.endsWith('.lovable.app')
+  return (
+    hostname.endsWith('.lovable.app') ||
+    hostname.endsWith('.lovable.com') ||
+    hostname.endsWith('.lovable.dev')
+  )
 }
 
 export function isAllowedOrigin(origin: string): boolean {
@@ -30,7 +34,7 @@ export function isAllowedOrigin(origin: string): boolean {
       return false
     }
 
-    // Permite domínios .lovable.app
+    // Permite domínios Lovable (.lovable.app, .lovable.com, .lovable.dev)
     if (isLovableOrigin(url.hostname)) {
       return true
     }
