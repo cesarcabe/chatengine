@@ -12,12 +12,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Attachment, AttachmentType } from '@/modules/chatengine/domain/Attachment'
 import { requireWorkspace } from '@/modules/chatengine/adapters/http/auth'
 import { chatEngine } from '@/modules/chatengine/composition/root'
+import { setCorsHeaders, handleCorsPreflightRequest } from '@/modules/chatengine/adapters/http/cors'
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin')
+  const response = handleCorsPreflightRequest(origin)
+  if (response) return response
+  return new NextResponse(null, { status: 404 })
+}
 
 export async function POST(request: NextRequest) {
   try {
+    const origin = request.headers.get('origin')
     const authResult = await requireWorkspace(request)
     if ('response' in authResult) {
-      return authResult.response
+      return setCorsHeaders(origin, authResult.response)
     }
 
     // Lê FormData
@@ -25,10 +34,11 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File
 
     if (!file) {
-      return NextResponse.json(
+      const response = NextResponse.json(
         { error: 'Arquivo é obrigatório' },
         { status: 400 }
       )
+      return setCorsHeaders(origin, response)
     }
 
     // Determina tipo de anexo
@@ -67,12 +77,15 @@ export async function POST(request: NextRequest) {
       },
     }
 
-    return NextResponse.json(attachment, { status: 201 })
+    const response = NextResponse.json(attachment, { status: 201 })
+    return setCorsHeaders(origin, response)
   } catch (error) {
     console.error('Erro ao fazer upload de anexo:', error)
-    return NextResponse.json(
+    const origin = request.headers.get('origin')
+    const response = NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
     )
+    return setCorsHeaders(origin, response)
   }
 }
