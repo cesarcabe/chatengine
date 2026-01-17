@@ -12,21 +12,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspace } from '@/modules/chatengine/adapters/http/auth'
 import { chatEngine } from '@/modules/chatengine/composition/root'
 import { InvalidRequestError } from '@/modules/chatengine/application/use-cases/errors'
-import { setCorsHeaders, handleCorsPreflightRequest } from '@/modules/chatengine/adapters/http/cors'
-
-export async function OPTIONS(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  const response = handleCorsPreflightRequest(origin)
-  if (response) return response
-  return new NextResponse(null, { status: 404 })
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const origin = request.headers.get('origin')
     const authResult = await requireWorkspace(request)
     if ('response' in authResult) {
-      return setCorsHeaders(origin, authResult.response)
+      return authResult.response
     }
     const { workspaceId } = authResult.auth
 
@@ -42,29 +33,24 @@ export async function GET(request: NextRequest) {
       since,
       limit,
     })
-    const response = NextResponse.json(messages)
-    return setCorsHeaders(origin, response)
+    return NextResponse.json(messages)
   } catch (error) {
-    const origin = request.headers.get('origin')
     if (error instanceof InvalidRequestError) {
-      const response = NextResponse.json({ error: error.message }, { status: 400 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
     console.error('Erro ao buscar mensagens:', error)
-    const response = NextResponse.json(
+    return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
     )
-    return setCorsHeaders(origin, response)
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const origin = request.headers.get('origin')
     const authResult = await requireWorkspace(request)
     if ('response' in authResult) {
-      return setCorsHeaders(origin, authResult.response)
+      return authResult.response
     }
     const { workspaceId, userId } = authResult.auth
 
@@ -82,19 +68,15 @@ export async function POST(request: NextRequest) {
       attachments,
     })
 
-    const response = NextResponse.json(newMessage, { status: 201 })
-    return setCorsHeaders(origin, response)
+    return NextResponse.json(newMessage, { status: 201 })
   } catch (error) {
-    const origin = request.headers.get('origin')
     if (error instanceof InvalidRequestError) {
-      const response = NextResponse.json({ error: error.message }, { status: 400 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
     console.error('Erro ao enviar mensagem:', error)
-    const response = NextResponse.json(
+    return NextResponse.json(
       { error: 'Erro interno do servidor' },
       { status: 500 }
     )
-    return setCorsHeaders(origin, response)
   }
 }

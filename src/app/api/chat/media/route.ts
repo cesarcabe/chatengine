@@ -21,7 +21,6 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { chatEngine } from '@/modules/chatengine/composition/root'
 import { requireWorkspace } from '@/modules/chatengine/adapters/http/auth'
-import { setCorsHeaders, handleCorsPreflightRequest } from '@/modules/chatengine/adapters/http/cors'
 
 const EVOLUTION_BASE_URL = process.env.EVOLUTION_API_BASE_URL || 'https://evo.newflow.me'
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY || ''
@@ -35,19 +34,11 @@ function buildEvolutionUrlFromDirectPath(directPath: string): string {
   return `${base}${path}`
 }
 
-export async function OPTIONS(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  const response = handleCorsPreflightRequest(origin)
-  if (response) return response
-  return new NextResponse(null, { status: 404 })
-}
-
 export async function GET(request: NextRequest) {
   try {
-    const origin = request.headers.get('origin')
     const authResult = await requireWorkspace(request)
     if ('response' in authResult) {
-      return setCorsHeaders(origin, authResult.response)
+      return authResult.response
     }
     const { workspaceId } = authResult.auth
 
@@ -55,8 +46,7 @@ export async function GET(request: NextRequest) {
     const attachmentId = request.nextUrl.searchParams.get('attachmentId')
 
     if (!providerMessageId || !attachmentId) {
-      const response = NextResponse.json({ error: 'providerMessageId e attachmentId são obrigatórios' }, { status: 400 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: 'providerMessageId e attachmentId são obrigatórios' }, { status: 400 })
     }
 
     const message = await chatEngine.repositories.messageRepository.findByProviderMessageId(
@@ -64,14 +54,12 @@ export async function GET(request: NextRequest) {
       providerMessageId
     )
     if (!message) {
-      const response = NextResponse.json({ error: 'Mensagem não encontrada' }, { status: 404 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: 'Mensagem não encontrada' }, { status: 404 })
     }
 
     const attachment = message.attachments?.find((a) => a.id === attachmentId)
     if (!attachment) {
-      const response = NextResponse.json({ error: 'Attachment não encontrado' }, { status: 404 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: 'Attachment não encontrado' }, { status: 404 })
     }
 
     const meta = attachment.metadata || {}
@@ -81,8 +69,7 @@ export async function GET(request: NextRequest) {
       meta.evolutionSourceUrl || meta.sourceUrl || meta.url || meta.directPath
 
     if (!sourceUrl) {
-      const response = NextResponse.json({ error: 'Fonte de mídia não disponível' }, { status: 404 })
-      return setCorsHeaders(origin, response)
+      return NextResponse.json({ error: 'Fonte de mídia não disponível' }, { status: 404 })
     }
 
     const urlToFetch = meta.directPath ? buildEvolutionUrlFromDirectPath(meta.directPath) : buildEvolutionUrlFromDirectPath(sourceUrl)
@@ -107,11 +94,10 @@ export async function GET(request: NextRequest) {
 
     if (!upstream.ok && upstream.status !== 206) {
       const text = await upstream.text().catch(() => '')
-      const response = NextResponse.json(
+      return NextResponse.json(
         { error: `Falha ao baixar mídia (${upstream.status})`, details: text },
         { status: 502 }
       )
-      return setCorsHeaders(origin, response)
     }
 
     const outHeaders = new Headers()
@@ -132,17 +118,13 @@ export async function GET(request: NextRequest) {
     // Cache leve (dev-friendly)
     outHeaders.set('Cache-Control', 'private, max-age=3600')
 
-    // Aplica CORS headers
-    const response = new NextResponse(upstream.body, {
+    return new NextResponse(upstream.body, {
       status: upstream.status,
       headers: outHeaders,
     })
-    return setCorsHeaders(origin, response)
   } catch (error) {
     console.error('Erro no proxy de mídia:', error)
-    const origin = request.headers.get('origin')
-    const response = NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
-    return setCorsHeaders(origin, response)
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
 }
 
